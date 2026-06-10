@@ -1211,20 +1211,38 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch
 // Swipe between pages
 (function(){
   const pages=['prehled','add','history','settings'];
-  let startX=0, startY=0;
+  let startX=0, startY=0, startScrollY=0;
   const el=document.getElementById('main-content');
   el.addEventListener('touchstart',e=>{
     startX=e.touches[0].clientX;
     startY=e.touches[0].clientY;
+    startScrollY=el.scrollTop;
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    // Allow vertical scroll to work normally
   },{passive:true});
   el.addEventListener('touchend',e=>{
     const dx=e.changedTouches[0].clientX-startX;
     const dy=e.changedTouches[0].clientY-startY;
-    // Only horizontal swipe (more horizontal than vertical, min 50px)
-    if(Math.abs(dx)<50||Math.abs(dx)<Math.abs(dy)) return;
+    const scrolled=Math.abs(el.scrollTop-startScrollY);
+    // Ignore if user scrolled vertically, swipe too short, or more vertical than horizontal
+    if(scrolled>10||Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5) return;
     const idx=pages.indexOf(activePage);
-    if(dx<0&&idx<pages.length-1) showPage(pages[idx+1]); // swipe left = next
-    if(dx>0&&idx>0) showPage(pages[idx-1]); // swipe right = prev
+    if(dx<0&&idx<pages.length-1) showPage(pages[idx+1]);
+    if(dx>0&&idx>0) showPage(pages[idx-1]);
+  },{passive:true});
+  // Also listen on the whole document for edge swipes
+  document.addEventListener('touchstart',e=>{
+    startX=e.touches[0].clientX;
+    startY=e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    const dx=e.changedTouches[0].clientX-startX;
+    const dy=e.changedTouches[0].clientY-startY;
+    if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5) return;
+    const idx=pages.indexOf(activePage);
+    if(dx<0&&idx<pages.length-1) showPage(pages[idx+1]);
+    if(dx>0&&idx>0) showPage(pages[idx-1]);
   },{passive:true});
 })();
 </script>
