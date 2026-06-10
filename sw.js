@@ -1,4 +1,4 @@
-const CACHE = 'energie-v1';
+const CACHE = 'energie-v10';
 const ASSETS = [
   './index.html',
   './manifest.json'
@@ -17,7 +17,12 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  // Always fetch fresh from network, fall back to cache
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request).catch(() => caches.match('./index.html')))
+    fetch(e.request).then(response => {
+      const clone = response.clone();
+      caches.open(CACHE).then(c => c.put(e.request, clone));
+      return response;
+    }).catch(() => caches.match(e.request))
   );
 });
