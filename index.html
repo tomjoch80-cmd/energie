@@ -1241,8 +1241,10 @@ function exportCSV(){
     });
   });
   const NL=String.fromCharCode(13,10);
-  const csv=rows.map(r=>r.map(v=>{
-    const s=String(v);
+  const csv=rows.map((r,ri)=>r.map((v,ci)=>{
+    let s=String(v);
+    // Use comma as decimal separator for numeric columns (so Excel CZ doesn't read as date)
+    if(ri>0 && ci>=2) s=s.replace('.',',');
     return s.includes(',')||s.includes(';')?'"'+s+'"':s;
   }).join(';')).join(NL);
   const BOM=String.fromCharCode(0xFEFF);
