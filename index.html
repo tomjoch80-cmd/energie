@@ -1,4 +1,1321 @@
 <!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#0f1923"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Energie"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Sledování energií</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDg1hmJlmVGMtt302JUNdYgxBaMZeuRekY",
+    authDomain: "energie-ada39.firebaseapp.com",
+    projectId: "energie-ada39",
+    storageBucket: "energie-ada39.firebasestorage.app",
+    messagingSenderId: "587914843142",
+    appId: "1:587914843142:web:ade2fa931438b249a6df87"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const DOC = doc(db, 'energie', 'data');
+
+  // Expose save function globally
+  window._fbSave = async function(entries, settings, archived) {
+    try {
+      await setDoc(DOC, {
+        entries: JSON.stringify(entries),
+        settings: JSON.stringify(settings),
+        archived: JSON.stringify(archived)
+      });
+      return true;
+    } catch(e) { console.error('Firebase save error:', e); return false; }
+  };
+
+  // Listen for real-time updates
+  onSnapshot(DOC, (snap) => {
+    if (!snap.exists()) return;
+    const d = snap.data();
+    try {
+      const newEntries  = JSON.parse(d.entries  || '[]');
+      const newSettings = JSON.parse(d.settings || 'null');
+      const newArchived = JSON.parse(d.archived || '{}');
+      if (window._fbLoaded) {
+        // Merge remote data into app state
+        window._fbMerge(newEntries, newSettings, newArchived);
+      } else {
+        // First load — initialize app with remote data
+        window._fbInitData = { newEntries, newSettings, newArchived };
+        window._fbLoaded = true;
+      }
+    } catch(e) { console.error('Firebase parse error:', e); }
+  }, (err) => {
+    console.warn('Firebase offline, using local data:', err.message);
+    window._fbLoaded = true;
+    window._fbInitData = null;
+  });
+</script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
+<style>
+:root{
+  --bg:#0f1923;--bg2:#162030;--bg3:#1e2d3d;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.18);
+  --text:#e8edf2;--text2:#7a90a4;--text3:#4a6070;
+  --el:#4da6ff;--gas:#ffaa44;--wat:#44d4a0;
+  --pos:#44d4a0;--neg:#ff6b6b;
+  --r:12px;--rs:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;overflow:hidden;}
+#app{display:flex;flex-direction:column;height:100vh;max-width:480px;margin:0 auto;}
+
+/* Header */
+.hdr{padding:14px 18px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+.hdr-title{font-size:18px;font-weight:600;letter-spacing:-.3px;}
+.hdr-sub{font-size:12px;color:var(--text2);margin-top:1px;}
+
+/* Nav */
+.nav{display:flex;border-top:1px solid var(--border);}
+.nb{flex:1;padding:9px 4px 11px;border:none;background:none;color:var(--text2);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-family:'DM Sans',sans-serif;transition:color .15s;}
+.nb i{font-size:20px;}
+.nb.active{color:var(--el);}
+
+/* Content */
+.content{flex:1;overflow-y:auto;padding:14px 16px;overscroll-behavior:contain;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;}
+.clabel{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;font-weight:500;}
+.divider{height:1px;background:var(--border);margin:12px 0;}
+
+/* Form */
+.fg{margin-bottom:10px;}
+.fg label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px;font-weight:500;}
+.fg input,.fg select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:10px 12px;color:var(--text);font-size:15px;font-family:'DM Sans',sans-serif;outline:none;-webkit-appearance:none;}
+.fg input:focus,.fg select:focus{border-color:var(--border2);}
+.fg .hint{font-size:11px;color:var(--text3);margin-top:3px;}
+.fg .hint.ok{color:var(--pos);}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+
+/* Buttons */
+.btn{width:100%;padding:12px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border-radius:var(--rs);border:none;transition:opacity .15s;}
+.btn:active{opacity:.75;}
+.btn-primary{background:var(--el);color:#0f1923;}
+.btn-ghost{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-weight:500;}
+.btn-sm{padding:6px 12px;font-size:12px;font-weight:500;width:auto;border-radius:6px;}
+
+/* Segment */
+.seg{display:flex;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);padding:3px;margin-bottom:12px;}
+.seg .sb{flex:1;padding:7px 4px;border:none;background:none;color:var(--text2);font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;border-radius:6px;transition:all .15s;}
+.seg .sb.active{background:var(--bg3);color:var(--text);font-weight:500;}
+
+/* Overview */
+.med-block{margin-bottom:10px;}
+.med-hdr{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.med-dot{width:8px;height:8px;border-radius:50%;}
+.med-name{font-size:14px;font-weight:600;}
+.med-period{font-size:11px;color:var(--text3);margin-left:auto;}
+.prog{height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:8px;}
+.prog-fill{height:100%;border-radius:3px;transition:width .4s;}
+.stats3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;}
+.sbox{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);padding:10px;}
+.sbox-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
+.sbox-val{font-size:14px;font-weight:600;font-family:'DM Mono',monospace;}
+.sbox-sub{font-size:10px;color:var(--text2);margin-top:2px;}
+.total-row{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.total-label{font-size:12px;color:var(--text2);}
+.total-sub{font-size:11px;color:var(--text3);}
+.total-val{font-size:16px;font-weight:600;font-family:'DM Mono',monospace;}
+
+/* Archive toggle */
+.arch-toggle{width:100%;background:none;border:1px solid var(--border);border-radius:var(--rs);padding:10px 14px;color:var(--text2);font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-top:6px;}
+.arch-toggle i{font-size:16px;transition:transform .2s;}
+.arch-section{margin-top:8px;}
+.arch-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:8px;overflow:hidden;}
+.arch-item-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;}
+.arch-item-hdr:active{background:var(--bg3);}
+.arch-item-label{font-size:13px;font-weight:500;}
+.arch-item-meta{font-size:11px;color:var(--text2);display:flex;gap:10px;margin-top:2px;flex-wrap:wrap;}
+.arch-badge{font-size:10px;padding:2px 7px;border-radius:4px;background:rgba(68,212,160,.1);border:1px solid rgba(68,212,160,.25);color:var(--pos);}
+.arch-detail{padding:0 14px 12px;border-top:1px solid var(--border);display:none;}
+.arch-detail.open{display:block;}
+.arch-sum3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:10px 0 8px;}
+.arch-sbox{background:var(--bg3);border-radius:6px;padding:8px;}
+.arch-sbox-label{font-size:10px;color:var(--text3);margin-bottom:3px;}
+.arch-sbox-val{font-size:13px;font-weight:600;font-family:'DM Mono',monospace;}
+
+/* Table */
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;padding:5px 6px 8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:500;border-bottom:1px solid var(--border);}
+td{padding:8px 6px;border-bottom:1px solid var(--border);color:var(--text);}
+tr:last-child td{border-bottom:none;}
+td.r{text-align:right;font-family:'DM Mono',monospace;font-size:12px;}
+td.pos{text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--pos);}
+td.neg{text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--neg);}
+.icon-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:3px 5px;font-size:15px;}
+.icon-btn:active{color:var(--text);}
+.icon-btn.danger:active{color:var(--neg);}
+
+/* Settings */
+.sett-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;}
+.sett-med-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:12px;}
+.plan-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.plan-row:last-child{border-bottom:none;}
+.plan-from{font-weight:500;font-family:'DM Mono',monospace;font-size:12px;min-width:60px;}
+.plan-vals{color:var(--text2);font-size:12px;}
+.plan-actions{display:flex;gap:2px;}
+
+/* Month+year picker */
+.my-pick{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+/* Misc */
+.empty{text-align:center;padding:28px 16px;color:var(--text2);font-size:14px;line-height:1.7;}
+.empty i{font-size:32px;display:block;margin-bottom:8px;color:var(--text3);}
+.toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rs);padding:8px 18px;font-size:13px;color:var(--text);opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;z-index:99;}
+.toast.show{opacity:1;}
+.sec-title{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;font-weight:500;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="hdr">
+    <div><div class="hdr-title">Energie</div><div class="hdr-sub" id="hdr-sub">Sledování spotřeby</div></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="sync-indicator" style="font-size:11px;color:var(--text3);display:none">↕ sync</span>
+      <i class="ti ti-bolt" style="font-size:22px;color:var(--el)"></i>
+    </div>
+  </div>
+
+  <div class="content" id="main-content">
+
+    <!-- PŘEHLED -->
+    <div class="page active" id="page-prehled">
+      <div id="prehled-content"></div>
+    </div>
+
+    <!-- ODEČET -->
+    <div class="page" id="page-add">
+      <div class="card">
+        <div class="clabel">Nový odečet</div>
+        <div class="fg">
+          <label>Médium</label>
+          <select id="a-type" onchange="onAddTypeChange()">
+            <option value="el">⚡ Elektřina</option>
+            <option value="gas">🔥 Plyn</option>
+            <option value="wat">💧 Voda</option>
+          </select>
+        </div>
+        <div class="fr2">
+          <div class="fg">
+            <label>Rok</label>
+            <select id="a-year" onchange="onAddMonthChange()"></select>
+          </div>
+          <div class="fg">
+            <label>Měsíc</label>
+            <select id="a-month" onchange="onAddMonthChange()">
+              <option value="01">Leden</option><option value="02">Únor</option><option value="03">Březen</option>
+              <option value="04">Duben</option><option value="05">Květen</option><option value="06">Červen</option>
+              <option value="07">Červenec</option><option value="08">Srpen</option><option value="09">Září</option>
+              <option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg">
+          <label id="a-stav-lbl">Stav měřidla (kWh)</label>
+          <input type="number" id="a-stav" step="0.1" placeholder="0" onkeydown="if(event.key==='Enter')addEntry()"/>
+        </div>
+        <div class="fg" id="a-plan-info" style="background:var(--bg3);border-radius:var(--rs);padding:10px 12px;margin-bottom:2px;">
+          <div style="font-size:12px;color:var(--text2)" id="a-plan-text">—</div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:8px" onclick="addEntry()">Přidat odečet</button>
+      </div>
+    </div>
+
+    <!-- HISTORIE -->
+    <div class="page" id="page-history">
+      <div class="seg" id="hist-seg">
+        <button class="sb active" onclick="setHistType('el')">Elektřina</button>
+        <button class="sb" onclick="setHistType('gas')">Plyn</button>
+        <button class="sb" onclick="setHistType('wat')">Voda</button>
+      </div>
+      <div id="hist-content"></div>
+    </div>
+
+    <!-- NASTAVENÍ -->
+    <div class="page" id="page-settings">
+
+      <!-- Per-medium blocks -->
+      <div id="sett-el" class="sett-block" style="padding:0;">
+        <div onclick="toggleSettBlock('el')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:14px 16px;">
+          <div class="sett-med-title" style="margin-bottom:0"><span style="width:8px;height:8px;border-radius:50%;background:var(--el);display:inline-block"></span>Elektřina</div>
+          <i class="ti ti-chevron-down" id="sett-icon-el" style="font-size:16px;color:var(--text3);transition:transform .2s;"></i>
+        </div>
+        <div id="sett-body-el" style="display:none;padding:0 16px 14px;">
+        <div class="fr2">
+          <div class="fg">
+            <label>Výročí (začátek období)</label>
+            <select id="s-vyrocí-el">
+              <option value="1">Leden</option><option value="2">Únor</option><option value="3">Březen</option>
+              <option value="4">Duben</option><option value="5">Květen</option><option value="6">Červen</option>
+              <option value="7">Červenec</option><option value="8">Srpen</option><option value="9">Září</option>
+              <option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Počáteční stav (kWh)</label>
+            <input type="number" id="s-init-el" step="0.1" placeholder="nepovinné"/>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="sec-title">Výměny měřáku</div>
+        <div id="replacements-el" style="margin-bottom:10px;min-height:10px;"></div>
+        <div class="fr2" style="margin-bottom:6px;">
+          <div class="fg" style="margin-bottom:0"><label>Měsíc výměny</label>
+            <div class="my-pick">
+              <select id="rep-y-el"><option value="2020">2020</option><option value="2021">2021</option><option value="2022">2022</option><option value="2023">2023</option><option value="2024" selected>2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
+              <select id="rep-m-el"><option value="01">Leden</option><option value="02">Únor</option><option value="03">Březen</option><option value="04">Duben</option><option value="05">Květen</option><option value="06">Červen</option><option value="07">Červenec</option><option value="08">Srpen</option><option value="09">Září</option><option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option></select>
+            </div>
+          </div>
+          <div class="fg" style="margin-bottom:0"><label>Nový počáteční stav (kWh)</label><input type="number" id="rep-stav-el" step="0.1" placeholder="0"/></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addReplacement('el')" style="width:100%;margin-top:4px"><i class="ti ti-replace" style="font-size:13px"></i> Přidat výměnu</button>
+        <div class="divider"></div>
+        <div class="sec-title">Ceníky (cena + záloha od měsíce)</div>
+        <div id="plans-el" style="margin-bottom:10px;min-height:20px;"></div>
+        <div class="fr3" style="margin-bottom:6px;">
+          <div class="fg" style="margin-bottom:0;grid-column:span 3">
+            <label>Platí od</label>
+            <div class="my-pick">
+              <select id="np-y-el"><option value="2020">2020</option><option value="2021">2021</option><option value="2022">2022</option><option value="2023">2023</option><option value="2024" selected>2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
+              <select id="np-m-el"><option value="01">Leden</option><option value="02">Únor</option><option value="03">Březen</option><option value="04">Duben</option><option value="05">Květen</option><option value="06">Červen</option><option value="07">Červenec</option><option value="08">Srpen</option><option value="09">Září</option><option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option></select>
+            </div>
+          </div>
+        </div>
+        <div class="fr2" style="margin-bottom:6px;">
+          <div class="fg" style="margin-bottom:0"><label>Cena (Kč/kWh)</label><input type="number" id="np-price-el" step="0.01" placeholder="0"/></div>
+          <div class="fg" style="margin-bottom:0"><label>Záloha (Kč/měs)</label><input type="number" id="np-zal-el" step="10" placeholder="0"/></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addPlan('el')" style="width:100%;margin-top:4px"><i class="ti ti-plus" style="font-size:13px"></i> Přidat ceník</button>
+        </div>
+      </div>
+
+      <div id="sett-gas" class="sett-block" style="padding:0;">
+        <div onclick="toggleSettBlock('gas')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:14px 16px;">
+          <div class="sett-med-title" style="margin-bottom:0"><span style="width:8px;height:8px;border-radius:50%;background:var(--gas);display:inline-block"></span>Plyn</div>
+          <i class="ti ti-chevron-down" id="sett-icon-gas" style="font-size:16px;color:var(--text3);transition:transform .2s;"></i>
+        </div>
+        <div id="sett-body-gas" style="display:none;padding:0 16px 14px;">
+        <div class="fr2">
+          <div class="fg">
+            <label>Výročí (začátek období)</label>
+            <select id="s-vyrocí-gas">
+              <option value="1">Leden</option><option value="2">Únor</option><option value="3">Březen</option>
+              <option value="4">Duben</option><option value="5">Květen</option><option value="6">Červen</option>
+              <option value="7">Červenec</option><option value="8">Srpen</option><option value="9">Září</option>
+              <option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Počáteční stav (m³)</label>
+            <input type="number" id="s-init-gas" step="0.1" placeholder="nepovinné"/>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="sec-title">Výměny měřáku</div>
+        <div id="replacements-gas" style="margin-bottom:10px;min-height:10px;"></div>
+        <div class="fr2" style="margin-bottom:6px;">
+          <div class="fg" style="margin-bottom:0"><label>Měsíc výměny</label>
+            <div class="my-pick">
+              <select id="rep-y-gas"><option value="2020">2020</option><option value="2021">2021</option><option value="2022">2022</option><option value="2023">2023</option><option value="2024" selected>2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
+              <select id="rep-m-gas"><option value="01">Leden</option><option value="02">Únor</option><option value="03">Březen</option><option value="04">Duben</option><option value="05">Květen</option><option value="06">Červen</option><option value="07">Červenec</option><option value="08">Srpen</option><option value="09">Září</option><option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option></select>
+            </div>
+          </div>
+          <div class="fg" style="margin-bottom:0"><label>Nový počáteční stav (m³)</label><input type="number" id="rep-stav-gas" step="0.1" placeholder="0"/></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addReplacement('gas')" style="width:100%;margin-top:4px"><i class="ti ti-replace" style="font-size:13px"></i> Přidat výměnu</button>
+        <div class="divider"></div>
+        <div class="sec-title">Ceníky (cena + záloha od měsíce)</div>
+        <div id="plans-gas" style="margin-bottom:10px;min-height:20px;"></div>
+        <div class="fg" style="margin-bottom:6px;">
+          <label>Platí od</label>
+          <div class="my-pick">
+            <select id="np-y-gas"><option value="2020">2020</option><option value="2021">2021</option><option value="2022">2022</option><option value="2023">2023</option><option value="2024" selected>2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
+            <select id="np-m-gas"><option value="01">Leden</option><option value="02">Únor</option><option value="03">Březen</option><option value="04">Duben</option><option value="05">Květen</option><option value="06">Červen</option><option value="07">Červenec</option><option value="08">Srpen</option><option value="09">Září</option><option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option></select>
+          </div>
+        </div>
+        <div class="fr2" style="margin-bottom:6px;">
+          <div class="fg" style="margin-bottom:0"><label>Cena (Kč/m³)</label><input type="number" id="np-price-gas" step="0.01" placeholder="0"/></div>
+          <div class="fg" style="margin-bottom:0"><label>Záloha (Kč/měs)</label><input type="number" id="np-zal-gas" step="10" placeholder="0"/></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addPlan('gas')" style="width:100%;margin-top:4px"><i class="ti ti-plus" style="font-size:13px"></i> Přidat ceník</button>
+        </div>
+      </div>
+
+      <div id="sett-wat" class="sett-block" style="padding:0;">
+        <div onclick="toggleSettBlock('wat')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:14px 16px;">
+          <div class="sett-med-title" style="margin-bottom:0"><span style="width:8px;height:8px;border-radius:50%;background:var(--wat);display:inline-block"></span>Voda</div>
+          <i class="ti ti-chevron-down" id="sett-icon-wat" style="font-size:16px;color:var(--text3);transition:transform .2s;"></i>
+        </div>
+        <div id="sett-body-wat" style="display:none;padding:0 16px 14px;">
+        <div class="fr2">
+          <div class="fg">
+            <label>Výročí (začátek období)</label>
+            <select id="s-vyrocí-wat">
+              <option value="1">Leden</option><option value="2">Únor</option><option value="3">Březen</option>
+              <option value="4">Duben</option><option value="5">Květen</option><option value="6">Červen</option>
+              <option value="7">Červenec</option><option value="8">Srpen</option><option value="9">Září</option>
+              <option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Počáteční stav (m³)</label>
+            <input type="number" id="s-init-wat" step="0.1" placeholder="nepovinné"/>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="sec-title">Výměny měřáku</div>
+        <div id="replacements-wat" style="margin-bottom:10px;min-height:10px;"></div>
+        <div class="fr2" style="margin-bottom:6px;">
+          <div class="fg" style="margin-bottom:0"><label>Měsíc výměny</label>
+            <div class="my-pick">
+              <select id="rep-y-wat"><option value="2020">2020</option><option value="2021">2021</option><option value="2022">2022</option><option value="2023">2023</option><option value="2024" selected>2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
+              <select id="rep-m-wat"><option value="01">Leden</option><option value="02">Únor</option><option value="03">Březen</option><option value="04">Duben</option><option value="05">Květen</option><option value="06">Červen</option><option value="07">Červenec</option><option value="08">Srpen</option><option value="09">Září</option><option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option></select>
+            </div>
+          </div>
+          <div class="fg" style="margin-bottom:0"><label>Nový počáteční stav (m³)</label><input type="number" id="rep-stav-wat" step="0.1" placeholder="0"/></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addReplacement('wat')" style="width:100%;margin-top:4px"><i class="ti ti-replace" style="font-size:13px"></i> Přidat výměnu</button>
+        <div class="divider"></div>
+        <div class="sec-title">Ceníky (cena + záloha od měsíce)</div>
+        <div id="plans-wat" style="margin-bottom:10px;min-height:20px;"></div>
+        <div class="fg" style="margin-bottom:6px;">
+          <label>Platí od</label>
+          <div class="my-pick">
+            <select id="np-y-wat"><option value="2020">2020</option><option value="2021">2021</option><option value="2022">2022</option><option value="2023">2023</option><option value="2024" selected>2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
+            <select id="np-m-wat"><option value="01">Leden</option><option value="02">Únor</option><option value="03">Březen</option><option value="04">Duben</option><option value="05">Květen</option><option value="06">Červen</option><option value="07">Červenec</option><option value="08">Srpen</option><option value="09">Září</option><option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option></select>
+          </div>
+        </div>
+        <div class="fr2" style="margin-bottom:6px;">
+          <div class="fg" style="margin-bottom:0"><label>Cena (Kč/m³)</label><input type="number" id="np-price-wat" step="0.01" placeholder="0"/></div>
+          <div class="fg" style="margin-bottom:0"><label>Záloha (Kč/měs)</label><input type="number" id="np-zal-wat" step="10" placeholder="0"/></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addPlan('wat')" style="width:100%;margin-top:4px"><i class="ti ti-plus" style="font-size:13px"></i> Přidat ceník</button>
+        </div>
+      </div>
+
+      <button class="btn btn-ghost" onclick="saveBaseSettings()">Uložit výročí a počáteční stavy</button>
+      <p id="sett-saved" style="font-size:12px;color:var(--pos);text-align:center;margin-top:8px;min-height:16px;"></p>
+
+      <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;">
+        <div class="sec-title">Záloha dat</div>
+        <button class="btn btn-ghost" onclick="exportJSON()" style="margin-bottom:8px">
+          <i class="ti ti-download" style="font-size:14px"></i> Export záloha (JSON)
+        </button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(event)"/>
+        <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" style="margin-bottom:8px">
+          <i class="ti ti-upload" style="font-size:14px"></i> Obnovit ze zálohy (JSON)
+        </button>
+        <button class="btn btn-ghost" onclick="exportCSV()">
+          <i class="ti ti-table" style="font-size:14px"></i> Export do Excelu (CSV)
+        </button>
+        <p id="export-msg" style="font-size:12px;color:var(--pos);text-align:center;margin-top:8px;min-height:16px;"></p>
+      </div>
+
+      <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;">
+        <div class="sec-title" style="color:var(--neg)">Nebezpečná zóna</div>
+        <button class="btn btn-ghost" style="border-color:var(--neg);color:var(--neg);margin-top:8px" onclick="resetAllData()">
+          <i class="ti ti-trash" style="font-size:14px"></i> Smazat všechna data
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <nav class="nav">
+    <button class="nb active" onclick="showPage('prehled')" id="nav-prehled"><i class="ti ti-home"></i>Přehled</button>
+    <button class="nb" onclick="showPage('add')" id="nav-add"><i class="ti ti-plus"></i>Odečet</button>
+    <button class="nb" onclick="showPage('history')" id="nav-history"><i class="ti ti-list"></i>Historie</button>
+    <button class="nb" onclick="showPage('settings')" id="nav-settings"><i class="ti ti-settings"></i>Nastavení</button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+const UNITS   = {el:'kWh', gas:'m³', wat:'m³'};
+const LABELS  = {el:'Elektřina', gas:'Plyn', wat:'Voda'};
+const COLORS  = {el:'#4da6ff', gas:'#ffaa44', wat:'#44d4a0'};
+const CV      = {el:'var(--el)', gas:'var(--gas)', wat:'var(--wat)'};
+const MS      = ['','Led','Úno','Bře','Dub','Kvě','Čer','Čvc','Srp','Zář','Říj','Lis','Pro'];
+const ML      = ['','Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+const TYPES   = ['el','gas','wat'];
+
+// ─── State ────────────────────────────────────────────────────────────────────
+// entries: [{id, type, month:'YYYY-MM', stav}]
+// settings: {vyrocí:{el,gas,wat}, initStav:{el,gas,wat}, plans:{el:[{from,price,zaloha}], ...}}
+// archived: {'el_YYYY-MM': true}
+
+let entries  = JSON.parse(localStorage.getItem('en_entries') || '[]');
+let settings = JSON.parse(localStorage.getItem('en_settings') || 'null') || {
+  vyrocí: {el:1, gas:1, wat:1},
+  initStav: {el:'', gas:'', wat:''},
+  plans: {el:[], gas:[], wat:[]}
+};
+if(!settings.plans)      settings.plans   = {el:[], gas:[], wat:[]};
+if(!settings.replacements) settings.replacements = {el:[], gas:[], wat:[]};
+if(!settings.initStav)   settings.initStav= {el:'', gas:'', wat:''};
+if(!settings.vyrocí)     settings.vyrocí  = {el:1, gas:1, wat:1};
+
+let archived      = JSON.parse(localStorage.getItem('en_archived') || '{}');
+let histType      = 'el';
+let activePage    = 'prehled';
+let archOpen      = false;
+let openArchDet   = {};
+let editingEntry  = null; // id of entry being edited
+
+// ─── Persist ──────────────────────────────────────────────────────────────────
+function persist(){
+  localStorage.setItem('en_entries',  JSON.stringify(entries));
+  localStorage.setItem('en_settings', JSON.stringify(settings));
+  localStorage.setItem('en_archived', JSON.stringify(archived));
+  // Also save to Firebase for cross-device sync
+  if(window._fbSave) {
+    const ind=document.getElementById('sync-indicator');
+    if(ind){ind.style.display='inline';ind.textContent='↕ ukládám...';}
+    window._fbSave(entries, settings, archived).then(()=>{
+      if(ind){ind.textContent='✓ sync';setTimeout(()=>ind.style.display='none',2000);}
+    }).catch(()=>{
+      if(ind){ind.textContent='⚠ offline';setTimeout(()=>ind.style.display='none',3000);}
+    });
+  }
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2000);
+}
+
+// ─── Year select population ───────────────────────────────────────────────────
+function populateYearSelect(selId){
+  const sel=document.getElementById(selId); if(!sel) return;
+  const cur=new Date().getFullYear();
+  sel.innerHTML='';
+  for(let y=2018;y<=cur+3;y++){
+    const o=document.createElement('option');
+    o.value=y; o.textContent=y;
+    if(y===cur) o.selected=true;
+    sel.appendChild(o);
+  }
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+// Merge remote Firebase data into local state
+window._fbMerge = function(newEntries, newSettings, newArchived) {
+  entries  = newEntries;
+  if(newSettings) {
+    settings = newSettings;
+    if(!settings.plans)    settings.plans    = {el:[],gas:[],wat:[]};
+    if(!settings.initStav) settings.initStav = {el:'',gas:'',wat:''};
+    if(!settings.vyrocí)   settings.vyrocí   = {el:1,gas:1,wat:1};
+  }
+  archived = newArchived || {};
+  // Update localStorage cache
+  localStorage.setItem('en_entries',  JSON.stringify(entries));
+  localStorage.setItem('en_settings', JSON.stringify(settings));
+  localStorage.setItem('en_archived', JSON.stringify(archived));
+  // Re-render current page
+  if(activePage==='prehled') renderPrehled();
+  if(activePage==='history') renderHistory();
+  if(activePage==='settings') TYPES.forEach(t=>{renderPlans(t);});
+  // Update settings UI values
+  TYPES.forEach(t=>{
+    const vy=document.getElementById('s-vyrocí-'+t);
+    const si=document.getElementById('s-init-'+t);
+    if(vy) vy.value=settings.vyrocí[t]||1;
+    if(si) si.value=settings.initStav[t]||'';
+  });
+};
+
+function runInit() {
+  // Populate year selects
+  populateYearSelect('a-year');
+  TYPES.forEach(t=>populateYearSelect('np-y-'+t));
+
+  // Set current month in add form
+  const now=new Date();
+  document.getElementById('a-year').value=now.getFullYear();
+  document.getElementById('a-month').value=String(now.getMonth()+1).padStart(2,'0');
+
+  // Load settings into settings page
+  TYPES.forEach(t=>{
+    document.getElementById('s-vyrocí-'+t).value=settings.vyrocí[t]||1;
+    document.getElementById('s-init-'+t).value=settings.initStav[t]||'';
+    renderPlans(t);
+    renderReplacements(t);
+  });
+
+  onAddTypeChange();
+  renderPrehled();
+}
+
+// Wait up to 3s for Firebase, then fall back to localStorage
+(function init(){
+  const timeout = setTimeout(() => {
+    // Firebase didn't respond in time, use local data
+    runInit();
+  }, 3000);
+
+  function tryStart() {
+    if(window._fbLoaded !== undefined) {
+      clearTimeout(timeout);
+      if(window._fbInitData) {
+        window._fbMerge(
+          window._fbInitData.newEntries,
+          window._fbInitData.newSettings,
+          window._fbInitData.newArchived
+        );
+      }
+      runInit();
+    } else {
+      setTimeout(tryStart, 100);
+    }
+  }
+  tryStart();
+})();
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+function saveBaseSettings(){
+  TYPES.forEach(t=>{
+    settings.vyrocí[t]=parseInt(document.getElementById('s-vyrocí-'+t).value);
+    const iv=document.getElementById('s-init-'+t).value;
+    settings.initStav[t]=iv===''?'':parseFloat(iv);
+  });
+  persist();
+  const el=document.getElementById('sett-saved');
+  el.textContent='✓ Uloženo';
+  setTimeout(()=>el.textContent='',2000);
+  renderPrehled();
+}
+
+// Get plan valid for a given month (latest plan with from <= month)
+function getPlan(type, month){
+  const plans=(settings.plans[type]||[]).slice().sort((a,b)=>a.from.localeCompare(b.from));
+  let match=null;
+  for(const p of plans){ if(p.from<=month) match=p; }
+  return match;
+}
+
+function renderReplacements(type){
+  const cont=document.getElementById('replacements-'+type);
+  if(!cont) return;
+  const reps=(settings.replacements[type]||[]).slice().sort((a,b)=>b.from.localeCompare(a.from));
+  if(!reps.length){
+    cont.innerHTML='<div style="font-size:12px;color:var(--text3);padding:2px 0 4px">Žádné výměny měřáku.</div>';
+    return;
+  }
+  let html='';
+  reps.forEach(r=>{
+    html+='<div class="plan-row">'
+      +'<div><span class="plan-from">'+r.from+'</span>'
+      +'<span class="plan-vals"> → nový stav: '+r.stav+' '+UNITS[type]+'</span></div>'
+      +'<button class="icon-btn danger" onclick="deleteReplacement(this.dataset.t,this.dataset.f)" data-t="'+type+'" data-f="'+r.from+'" title="Smazat"><i class="ti ti-trash"></i></button>'
+      +'</div>';
+  });
+  cont.innerHTML=html;
+}
+
+function addReplacement(type){
+  const y=document.getElementById('rep-y-'+type).value;
+  const m=document.getElementById('rep-m-'+type).value;
+  const from=y+'-'+m;
+  const stav=parseFloat(document.getElementById('rep-stav-'+type).value);
+  if(isNaN(stav)){toast('Vyplň nový počáteční stav.');return;}
+  if(!settings.replacements) settings.replacements={el:[],gas:[],wat:[]};
+  settings.replacements[type]=settings.replacements[type].filter(r=>r.from!==from);
+  settings.replacements[type].push({from,stav});
+  settings.replacements[type].sort((a,b)=>a.from.localeCompare(b.from));
+  persist();
+  document.getElementById('rep-stav-'+type).value='';
+  renderReplacements(type);
+  toast('✓ Výměna měřáku od '+from+' uložena');
+}
+
+function deleteReplacement(typeOrEl,from){
+  const type=typeof typeOrEl==='string'?typeOrEl:typeOrEl.dataset.t;
+  from=from||typeOrEl.dataset.f;
+  if(!confirm('Smazat výměnu měřáku od '+from+'?')) return;
+  settings.replacements[type]=settings.replacements[type].filter(r=>r.from!==from);
+  persist();
+  renderReplacements(type);
+  toast('Výměna smazána');
+}
+
+
+function addPlan(type){
+  const y=document.getElementById('np-y-'+type).value;
+  const m=document.getElementById('np-m-'+type).value;
+  const from=y+'-'+m;
+  const price=parseFloat(document.getElementById('np-price-'+type).value);
+  const zaloha=parseFloat(document.getElementById('np-zal-'+type).value);
+  if(isNaN(price)||isNaN(zaloha)){toast('Vyplň cenu i zálohu.');return;}
+  settings.plans[type]=settings.plans[type].filter(p=>p.from!==from);
+  settings.plans[type].push({from,price,zaloha});
+  settings.plans[type].sort((a,b)=>a.from.localeCompare(b.from));
+  persist();
+  document.getElementById('np-price-'+type).value='';
+  document.getElementById('np-zal-'+type).value='';
+  renderPlans(type);
+  toast('✓ Ceník od '+from+' uložen');
+  onAddMonthChange();
+}
+
+function deletePlan(type, from){
+  if(!confirm('Smazat ceník od '+from+'?')) return;
+  settings.plans[type]=settings.plans[type].filter(p=>p.from!==from);
+  persist();
+  renderPlans(type);
+  toast('Ceník smazán');
+}
+
+function renderPlans(type){
+  const cont=document.getElementById('plans-'+type);
+  if(!cont) return;
+  const plans=(settings.plans[type]||[]).slice().sort((a,b)=>b.from.localeCompare(a.from));
+  if(!plans.length){
+    cont.innerHTML='<div style="font-size:12px;color:var(--text3);padding:2px 0 4px">Žádné ceníky — přidej první níže.</div>';
+    return;
+  }
+  cont.innerHTML=plans.map(p=>`
+    <div class="plan-row">
+      <div>
+        <span class="plan-from">${p.from}</span>
+        <span class="plan-vals"> · ${p.price} Kč/${UNITS[type]} · záloha ${p.zaloha} Kč</span>
+      </div>
+      <div class="plan-actions">
+        <button class="icon-btn danger" onclick="deletePlan('${type}','${p.from}')" title="Smazat"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>`).join('');
+}
+
+// ─── Add form ─────────────────────────────────────────────────────────────────
+function getAddMonth(){
+  return document.getElementById('a-year').value+'-'+document.getElementById('a-month').value;
+}
+
+function onAddTypeChange(){
+  const t=document.getElementById('a-type').value;
+  document.getElementById('a-stav-lbl').textContent='Stav měřidla ('+UNITS[t]+')';
+  onAddMonthChange();
+}
+
+function onAddMonthChange(){
+  const t=document.getElementById('a-type').value;
+  const month=getAddMonth();
+  const plan=getPlan(t,month);
+  const info=document.getElementById('a-plan-info');
+  const txt=document.getElementById('a-plan-text');
+  if(plan){
+    txt.innerHTML=`<span style="color:var(--text2)">Ceník od <b>${plan.from}</b>: </span><span style="color:var(--text)">${plan.price} Kč/${UNITS[t]}</span><span style="color:var(--text3)"> · záloha </span><span style="color:var(--text)">${plan.zaloha} Kč</span>`;
+    info.style.borderLeft='3px solid '+COLORS[t];
+  } else {
+    txt.innerHTML='<span style="color:var(--neg)">⚠ Žádný ceník pro tento měsíc — přidej ho v Nastavení.</span>';
+    info.style.borderLeft='3px solid var(--neg)';
+  }
+}
+
+function addEntry(){
+  const type=document.getElementById('a-type').value;
+  const month=getAddMonth();
+  const stav=parseFloat(document.getElementById('a-stav').value);
+  if(isNaN(stav)){toast('Vyplň stav měřidla.');return;}
+  const plan=getPlan(type,month);
+  if(!plan){toast('Nejdřív přidej ceník v Nastavení.');return;}
+
+  if(editingEntry!==null){
+    // Update existing
+    const idx=entries.findIndex(e=>e.id===editingEntry);
+    if(idx>=0) entries[idx]={...entries[idx], month, stav};
+    editingEntry=null;
+    document.querySelector('#page-add .btn-primary').textContent='Přidat odečet';
+    document.querySelector('#page-add .clabel').textContent='Nový odečet';
+  } else {
+    if(entries.find(e=>e.type===type&&e.month===month)){toast('Odečet pro tento měsíc už existuje.');return;}
+    entries.push({id:Date.now(), type, month, stav});
+  }
+
+  entries.sort((a,b)=>a.type.localeCompare(b.type)||a.month.localeCompare(b.month));
+  persist();
+  document.getElementById('a-stav').value='';
+
+  // Advance month by 1
+  const [y,m]=month.split('-').map(Number);
+  const next=new Date(y,m,1);
+  document.getElementById('a-year').value=next.getFullYear();
+  document.getElementById('a-month').value=String(next.getMonth()+1).padStart(2,'0');
+  onAddMonthChange();
+
+  toast('✓ Odečet uložen');
+  renderPrehled();
+}
+
+function startEditEntry(id){
+  const e=entries.find(x=>x.id===id); if(!e) return;
+  showPage('add');
+  document.getElementById('a-type').value=e.type;
+  document.getElementById('a-year').value=e.month.split('-')[0];
+  document.getElementById('a-month').value=e.month.split('-')[1];
+  document.getElementById('a-stav').value=e.stav;
+  editingEntry=id;
+  document.querySelector('#page-add .btn-primary').textContent='Uložit změny';
+  document.querySelector('#page-add .clabel').textContent='Upravit odečet';
+  onAddTypeChange();
+}
+
+function deleteEntry(id){
+  if(!confirm('Smazat tento odečet?')) return;
+  entries=entries.filter(e=>e.id!==id);
+  persist();
+  renderHistory();
+  renderPrehled();
+  toast('Odečet smazán');
+}
+
+// ─── Calculations ─────────────────────────────────────────────────────────────
+function getByType(t){
+  return entries.filter(e=>e.type===t).sort((a,b)=>a.month.localeCompare(b.month));
+}
+
+// Returns rows with consumption calculated. Uses initStav as baseline for first entry.
+function calcRows(type){
+  const list=getByType(type);
+  const rows=[];
+  if(!list.length) return rows;
+  const initSt=settings.initStav[type];
+  const hasInit=initSt!==''&&initSt!==null&&!isNaN(parseFloat(initSt));
+  const reps=((settings.replacements||{})[type]||[]).slice().sort((a,b)=>a.from.localeCompare(b.from));
+  for(let i=0;i<list.length;i++){
+    const c=list[i];
+    let prevStav;
+    const repAtMonth=reps.find(r=>r.from===c.month);
+    if(repAtMonth){
+      prevStav=repAtMonth.stav;
+    } else if(i===0){
+      if(hasInit) prevStav=parseFloat(initSt);
+      else continue;
+    } else {
+      const prevMonth=list[i-1].month;
+      const repBetween=reps.find(r=>r.from>prevMonth&&r.from<=c.month);
+      if(repBetween) prevStav=repBetween.stav;
+      else prevStav=list[i-1].stav;
+    }
+    const plan=getPlan(type,c.month);
+    const price=plan?plan.price:0;
+    const zaloha=plan?plan.zaloha:0;
+    const spo=Math.round((c.stav-prevStav)*10)/10;
+    const nak=Math.round(spo*price*10)/10;
+    const usp=Math.round((zaloha-nak)*10)/10;
+    rows.push({month:c.month,stavPrev:prevStav,stavCur:c.stav,spo,nak,price,zaloha,usp,id:c.id});
+  }
+  return rows;
+}
+
+// Period helpers
+function getPeriodStart(type){
+  const vm=settings.vyrocí[type]||1;
+  const now=new Date();
+  let y=now.getFullYear();
+  if(now.getMonth()+1<vm) y--;
+  return y+'-'+String(vm).padStart(2,'0');
+}
+function getPeriodEnd(type, startStr){
+  const vm=settings.vyrocí[type]||1;
+  const sy=parseInt(startStr.split('-')[0]);
+  const ey=vm===1?sy:sy+1;
+  const em=vm===1?12:vm-1;
+  return ey+'-'+String(em).padStart(2,'0');
+}
+function getPct(type){
+  const vm=settings.vyrocí[type]||1;
+  const now=new Date();
+  let y=now.getFullYear();
+  if(now.getMonth()+1<vm) y--;
+  const s=new Date(y,vm-1,1), e=new Date(y+1,vm-1,1);
+  return Math.min(100,Math.max(0,Math.round((now-s)/(e-s)*100)));
+}
+function getAllPeriods(type){
+  const vm=settings.vyrocí[type]||1;
+  const list=getByType(type);
+  const initSt=settings.initStav[type];
+  const hasInit=initSt!==''&&initSt!==null&&!isNaN(parseFloat(initSt));
+  // Use either first entry or initStav to determine earliest year
+  if(!list.length && !hasInit) return [];
+  let firstMonth=list.length?list[0].month:null;
+  const now=new Date();
+  let cy=now.getFullYear(); if(now.getMonth()+1<vm) cy--;
+  let sy;
+  if(firstMonth){
+    const [fy,fm]=firstMonth.split('-').map(Number);
+    sy=fy; if(fm<vm) sy=fy-1;
+  } else {
+    sy=cy;
+  }
+  const res=[];
+  for(let y=sy;y<=cy;y++){
+    const ps=y+'-'+String(vm).padStart(2,'0');
+    const pe=getPeriodEnd(type,ps);
+    const [psy,psm]=ps.split('-').map(Number);
+    const [pey,pem]=pe.split('-').map(Number);
+    res.push({start:ps,end:pe,key:type+'_'+ps,label:MS[psm]+' '+psy+' – '+MS[pem]+' '+pey});
+  }
+  return res.reverse();
+}
+function periodStats(type,ps,pe){
+  // Include rows where month falls within period [ps, pe]
+  // Note: a row's month is the month of the CURRENT reading (not the baseline)
+  const rows=calcRows(type).filter(r=>r.month>=ps&&r.month<=pe);
+  // Entries that are IN the period or are the baseline entry just before period start
+  const ents=getByType(type).filter(e=>e.month>=ps&&e.month<=pe);
+  const totalSpo=Math.round(rows.reduce((s,r)=>s+r.spo,0)*10)/10;
+  const totalNak=Math.round(rows.reduce((s,r)=>s+r.nak,0));
+  const totalZal=rows.reduce((s,r)=>s+r.zaloha,0);
+  const totalUsp=Math.round(totalZal-totalNak);
+  return{rows,ents,totalSpo,totalNak,totalZal,totalUsp};
+}
+
+// ─── Přehled ──────────────────────────────────────────────────────────────────
+function toggleArchPeriod(key){
+  if(archived[key]) delete archived[key]; else archived[key]=true;
+  persist(); renderPrehled();
+}
+function toggleArchDet(key){
+  openArchDet[key]=!openArchDet[key];
+  const el=document.getElementById('ad-'+key);
+  const ic=document.getElementById('ai-'+key);
+  if(el) el.classList.toggle('open',!!openArchDet[key]);
+  if(ic) ic.style.transform=openArchDet[key]?'rotate(180deg)':'';
+}
+function toggleArchSection(){
+  archOpen=!archOpen;
+  const sec=document.getElementById('arch-section');
+  const btn=document.getElementById('arch-toggle');
+  if(sec) sec.style.display=archOpen?'block':'none';
+  if(btn){
+    btn.querySelector('span').textContent=archOpen?'Skrýt archiv':'Zobrazit archiv';
+    btn.querySelector('i').style.transform=archOpen?'rotate(180deg)':'';
+  }
+}
+
+function renderPrehled(){
+  const cont=document.getElementById('prehled-content');
+  const nowStr=new Date().toISOString().slice(0,7);
+  let html=''; let hasAny=false; let totalNakAll=0,totalUspAll=0;
+
+  TYPES.forEach(t=>{
+    const ps=getPeriodStart(t);
+    const pe=getPeriodEnd(t,ps);
+    const pct=getPct(t);
+    const [psy,psm]=ps.split('-').map(Number);
+    const [pey,pem]=pe.split('-').map(Number);
+    // Use min(pe, nowStr) so we don't show future months but include all past months in period
+    const periodEnd=pe<nowStr?pe:nowStr;
+    const {rows,totalSpo,totalNak,totalZal,totalUsp}=periodStats(t,ps,periodEnd);
+    if(rows.length||getByType(t).length) hasAny=true;
+    totalNakAll+=totalNak; totalUspAll+=totalUsp;
+    const uc=totalUsp>=0?'var(--pos)':'var(--neg)';
+    const us=totalUsp>=0?'+':'';
+    const key=t+'_'+ps;
+
+    html+=`<div class="med-block">
+      <div class="med-hdr">
+        <span class="med-dot" style="background:${CV[t]}"></span>
+        <span class="med-name">${LABELS[t]}</span>
+        <span class="med-period">${MS[psm]} ${psy} – ${MS[pem]} ${pey}</span>
+      </div>
+      <div class="prog"><div class="prog-fill" style="width:${pct}%;background:${CV[t]}"></div></div>`;
+
+    if(!rows.length){
+      html+=`<div style="font-size:12px;color:var(--text3);padding:2px 0 8px">Žádné odečty v tomto období.</div>`;
+    } else {
+      html+=`<div class="sbox" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div class="sbox-label">Spotřeba</div>
+          <div class="sbox-val" style="color:${CV[t]}">${totalSpo.toLocaleString('cs')} ${UNITS[t]}</div>
+        </div>
+        <div style="height:1px;background:var(--border);margin-bottom:6px;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <div style="font-size:12px;color:var(--text2);">Zálohy <span style="font-size:10px;color:var(--text3)">(${rows.length} měs.)</span></div>
+          <div style="font-family:'DM Mono',monospace;font-size:13px;">${totalZal.toLocaleString('cs')} Kč</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <div style="font-size:12px;color:var(--text2);">Náklady</div>
+          <div style="font-family:'DM Mono',monospace;font-size:13px;">${totalNak.toLocaleString('cs')} Kč</div>
+        </div>
+        <div style="height:1px;background:var(--border);margin-bottom:6px;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:12px;color:var(--text2);">Úspora</div>
+          <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:${uc}">${us}${totalUsp.toLocaleString('cs')} Kč</div>
+        </div>
+      </div>
+`;
+      // YoY comparison for přehled
+      const vm2=settings.vyrocí[t]||1;
+      const prevPs=((parseInt(ps.split('-')[0])-1)+'-'+String(vm2).padStart(2,'0'));
+      const prevPe=getPeriodEnd(t,prevPs);
+      const prev=periodStats(t,prevPs,prevPe);
+      if(prev.rows.length){
+        const spoDiff=Math.round((totalSpo-prev.totalSpo)*10)/10;
+        const nakDiff=Math.round(totalNak-prev.totalNak);
+        const spoDiffColor=spoDiff<=0?'var(--pos)':'var(--neg)';
+        const nakDiffColor=nakDiff<=0?'var(--pos)':'var(--neg)';
+        const spoDiffStr=(spoDiff>0?'+':'')+spoDiff+' '+UNITS[t];
+        const nakDiffStr=(nakDiff>0?'+':'')+nakDiff.toLocaleString('cs')+' Kč';
+        html+='<div style="background:var(--bg3);border-radius:var(--rs);padding:8px 12px;margin-bottom:6px;font-size:12px;">';
+        html+='<div style="color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;font-size:10px;">Porovnání s předchozím obdobím</div>';
+        html+='<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text2)">Spotřeba loni</span><span style="font-family:DM Mono,monospace">'+prev.totalSpo.toLocaleString('cs')+' '+UNITS[t]+'</span></div>';
+        html+='<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text2)">Změna spotřeby</span><span style="font-family:DM Mono,monospace;color:'+spoDiffColor+'">'+spoDiffStr+'</span></div>';
+        html+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
+        html+='<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text2)">Náklady loni</span><span style="font-family:DM Mono,monospace">'+prev.totalNak.toLocaleString('cs')+' Kč</span></div>';
+        html+='<div style="display:flex;justify-content:space-between;"><span style="color:var(--text2)">Změna nákladů</span><span style="font-family:DM Mono,monospace;color:'+nakDiffColor+'">'+nakDiffStr+'</span></div>';
+        html+='</div>';
+      }
+      html+=`<div style="text-align:right;margin-bottom:4px;">
+        <button class="btn btn-ghost btn-sm" onclick="toggleArchPeriod('${key}')"><i class="ti ti-archive" style="font-size:12px"></i> Archivovat</button>
+      </div>`;
+    }
+    html+=`</div>`;
+    if(t!=='wat') html+=`<div style="height:1px;background:var(--border);margin:10px 0"></div>`;
+  });
+
+  if(hasAny){
+    const tc=totalUspAll>=0?'var(--pos)':'var(--neg)';
+    const ts=totalUspAll>=0?'+':'';
+    html+=`<div style="height:1px;background:var(--border);margin:12px 0"></div>
+    <div class="total-row"><div><div class="total-label">Celkové náklady</div><div class="total-sub">aktuální období</div></div><div class="total-val">${totalNakAll.toLocaleString('cs')} Kč</div></div>
+    <div class="total-row"><div><div class="total-label">Celková úspora</div><div class="total-sub">${totalUspAll>=0?'přeplatek':'nedoplatek'}</div></div><div class="total-val" style="color:${tc}">${ts}${totalUspAll.toLocaleString('cs')} Kč</div></div>`;
+    document.getElementById('hdr-sub').textContent=totalNakAll.toLocaleString('cs')+' Kč | '+ts+totalUspAll.toLocaleString('cs')+' Kč';
+  } else {
+    html=`<div class="empty"><i class="ti ti-gauge"></i>Zatím žádné záznamy.<br>Nejdřív nastav ceníky v <b>Nastavení</b>,<br>pak přidej odečty.</div>`;
+    document.getElementById('hdr-sub').textContent='Sledování spotřeby';
+  }
+
+  // Archive
+  const archKeys=Object.keys(archived);
+  if(archKeys.length){
+    html+=`<button class="arch-toggle" id="arch-toggle" onclick="toggleArchSection()">
+      <span>${archOpen?'Skrýt archiv':'Zobrazit archiv'}</span>
+      <i class="ti ti-chevron-down" style="font-size:16px;${archOpen?'transform:rotate(180deg)':''}"></i>
+    </button>
+    <div id="arch-section" style="display:${archOpen?'block':'none'}" class="arch-section">`;
+
+    TYPES.forEach(t=>{
+      const periods=getAllPeriods(t).filter(p=>archived[p.key]);
+      if(!periods.length) return;
+      html+=`<div style="margin-bottom:12px;"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px;"><span style="width:6px;height:6px;border-radius:50%;background:${CV[t]};display:inline-block"></span>${LABELS[t]}</div>`;
+      periods.forEach(({start,end,label,key})=>{
+        const {rows,totalSpo,totalNak,totalZal,totalUsp}=periodStats(t,start,end);
+        const uc=totalUsp>=0?'var(--pos)':'var(--neg)';
+        const us=totalUsp>=0?'+':'';
+        const isOpen=!!openArchDet[key];
+        html+=`<div class="arch-item">
+          <div class="arch-item-hdr" onclick="toggleArchDet('${key}')">
+            <div>
+              <div class="arch-item-label">${label} <span class="arch-badge">Archivováno</span></div>
+              <div class="arch-item-meta"><span>${totalSpo} ${UNITS[t]}</span><span>${totalNak.toLocaleString('cs')} Kč</span><span style="color:${uc}">${us}${totalUsp.toLocaleString('cs')} Kč</span></div>
+            </div>
+            <i class="ti ti-chevron-down" id="ai-${key}" style="font-size:16px;color:var(--text3);transition:transform .2s;${isOpen?'transform:rotate(180deg)':''}"></i>
+          </div>
+          <div class="arch-detail ${isOpen?'open':''}" id="ad-${key}">
+            <div class="arch-sum3">
+              <div class="arch-sbox"><div class="arch-sbox-label">Spotřeba</div><div class="arch-sbox-val" style="color:${CV[t]}">${totalSpo} ${UNITS[t]}</div></div>
+              <div class="arch-sbox"><div class="arch-sbox-label">Náklady</div><div class="arch-sbox-val">${totalNak.toLocaleString('cs')} Kč</div></div>
+              <div class="arch-sbox"><div class="arch-sbox-label">Úspora</div><div class="arch-sbox-val" style="color:${uc}">${us}${totalUsp.toLocaleString('cs')} Kč</div></div>
+            </div>
+            ${rows.length?`<div class="tbl-wrap"><table>
+              <tr><th>Měsíc</th><th style="text-align:right">Spotřeba</th><th style="text-align:right">Cena</th><th style="text-align:right">Náklady</th><th style="text-align:right">Úspora</th></tr>
+              ${[...rows].reverse().map(r=>`<tr>
+                <td style="font-size:12px;color:var(--text2)">${r.month}</td>
+                <td class="r">${r.spo} ${UNITS[t]}</td>
+                <td class="r" style="color:var(--text3)">${r.price} Kč</td>
+                <td class="r">${r.nak.toLocaleString('cs')} Kč</td>
+                <td class="${r.usp>=0?'pos':'neg'}">${r.usp>=0?'+':''}${r.usp.toLocaleString('cs')}</td>
+              </tr>`).join('')}
+            </table></div>`:''}
+            <div style="text-align:right;margin-top:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="toggleArchPeriod('${key}')"><i class="ti ti-archive-off" style="font-size:12px"></i> Odarchivovat</button>
+            </div>
+          </div>
+        </div>`;
+      });
+      html+=`</div>`;
+    });
+    html+=`</div>`;
+  }
+
+  cont.innerHTML=html;
+}
+
+// ─── Historie ─────────────────────────────────────────────────────────────────
+function setHistType(t){
+  histType=t;
+  document.querySelectorAll('#hist-seg .sb').forEach((b,i)=>b.classList.toggle('active',TYPES[i]===t));
+  renderHistory();
+}
+
+function renderHistory(){
+  const cont=document.getElementById('hist-content');
+  const list=getByType(histType);
+  if(!list.length){
+    cont.innerHTML=`<div class="empty"><i class="ti ti-gauge"></i>Žádné odečty pro toto médium.</div>`;
+    return;
+  }
+  const allRows=calcRows(histType);
+  const periods=getAllPeriods(histType);
+  let html='';
+
+  const nowStr=new Date().toISOString().slice(0,7);
+  // Track open/closed state per period key
+  if(!window._histOpen) window._histOpen={};
+
+  periods.forEach(({start,end,label,key})=>{
+    const pRows=allRows.filter(r=>r.month>=start&&r.month<=end);
+    const pEnts=list.filter(e=>e.month>=start&&e.month<=end);
+    if(!pEnts.length && !pRows.length) return;
+    const tSpo=Math.round(pRows.reduce((s,r)=>s+r.spo,0)*10)/10;
+    const tNak=Math.round(pRows.reduce((s,r)=>s+r.nak,0));
+    const tZal=pRows.reduce((s,r)=>s+r.zaloha,0);
+    const tUsp=Math.round(pRows.reduce((s,r)=>s+r.usp,0));
+    const uc=tUsp>=0?'var(--pos)':'var(--neg)'; const us=tUsp>=0?'+':'';
+    const isClosed=end<nowStr;
+    // Default: closed periods are collapsed, current is open
+    if(window._histOpen[key]===undefined) window._histOpen[key]=!isClosed;
+    const isOpen=window._histOpen[key];
+    const closedBadge=isClosed?'<span style="font-size:10px;background:rgba(68,212,160,.1);border:1px solid rgba(68,212,160,.25);color:var(--pos);border-radius:4px;padding:2px 7px;margin-left:6px;">Uzavřeno</span>':'';
+
+    // Summary line: spotřeba · zálohy · náklady · úspora
+    const summaryStr=pRows.length
+      ? tSpo+' '+UNITS[histType]+' · zálohy '+tZal.toLocaleString('cs')+' Kč · '+tNak.toLocaleString('cs')+' Kč · <span style="color:'+uc+'">'+us+tUsp.toLocaleString('cs')+' Kč</span>'
+      : '';
+
+    html+='<div style="margin-bottom:10px;">'
+      +'<div onclick="toggleHistPeriod(this.dataset.k)" data-k="'+key+'" style="cursor:pointer;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">'
+      +'<div>'
+      +'<div style="font-size:13px;font-weight:600;color:var(--text);">'+label+closedBadge+'</div>'
+      +(summaryStr?'<div style="font-size:11px;color:var(--text2);margin-top:3px;">'+summaryStr+'</div>':'')
+      +'</div>'
+      +'<i class="ti ti-chevron-down" style="font-size:16px;color:var(--text3);transition:transform .2s;flex-shrink:0;'+(isOpen?'transform:rotate(180deg)':'')+'"></i>'
+      +'</div>'
+      +'<div id="hperiod-'+key+'" style="display:'+(isOpen?'block':'none')+';">';
+
+    if(pRows.length){
+      const allRowsMap=Object.fromEntries(allRows.map(r=>[r.month,r]));
+      const histRows=[...pRows].reverse();
+      let tblHtml='<tr>'
+        +'<th>Měsíc / Stav</th>'
+        +'<th style="text-align:right">Spotřeba</th>'
+        +'<th style="text-align:right">Náklady</th>'
+        +'<th style="text-align:right">Záloha</th>'
+        +'<th style="text-align:right">Úspora</th>'
+        +'<th></th>'
+        +'</tr>';
+      histRows.forEach(r=>{
+        const [ry,rm]=r.month.split('-');
+        const lyMonth=(parseInt(ry)-1)+'-'+rm;
+        const ly=allRowsMap[lyMonth];
+        // diff spotřeba
+        const spoDiff=ly!=null?Math.round((r.spo-ly.spo)*10)/10:null;
+        const spoDiffColor=spoDiff==null?'var(--text3)':spoDiff<=0?'var(--pos)':'var(--neg)';
+        const spoDiffStr=spoDiff==null?'':' ('+(spoDiff>0?'+':'')+spoDiff+')';
+        // diff náklady
+        const nakDiff=ly!=null?Math.round(r.nak-ly.nak):null;
+        const nakDiffColor=nakDiff==null?'var(--text3)':nakDiff<=0?'var(--pos)':'var(--neg)';
+        const nakDiffStr=nakDiff==null?'':' ('+(nakDiff>0?'+':'')+nakDiff.toLocaleString('cs')+')';
+        const uspCls=r.usp>=0?'pos':'neg';
+        // Entry for editing - find by month+type
+        const entry=getByType(histType).find(e=>e.month===r.month);
+        const entryId=entry?entry.id:'';
+        // Row 1: main data
+        tblHtml+='<tr style="border-bottom:none">';
+        tblHtml+='<td style="font-size:12px;font-weight:500;padding-bottom:1px">'+r.month+'</td>';
+        tblHtml+='<td class="r" style="padding-bottom:1px">'+r.spo+' '+UNITS[histType]+'</td>';
+        tblHtml+='<td class="r" style="padding-bottom:1px">'+r.nak.toLocaleString('cs')+' Kč</td>';
+        tblHtml+='<td class="r" style="padding-bottom:1px">'+r.zaloha.toLocaleString('cs')+' Kč</td>';
+        tblHtml+='<td class="'+uspCls+'" style="padding-bottom:1px">'+(r.usp>=0?'+':'')+r.usp.toLocaleString('cs')+'</td>';
+        tblHtml+='<td rowspan="2" style="text-align:right;vertical-align:middle">'
+          +(entryId?'<button class="icon-btn" onclick="startEditEntry('+entryId+')" title="Upravit"><i class="ti ti-pencil"></i></button>'
+                   +'<button class="icon-btn danger" onclick="deleteEntry('+entryId+')" title="Smazat"><i class="ti ti-trash"></i></button>'
+            :'')
+          +'</td>';
+        tblHtml+='</tr>';
+        // Row 2: stav + loni comparison (smaller, muted)
+        tblHtml+='<tr>';
+        tblHtml+='<td style="font-size:11px;color:var(--text3);padding-top:1px">stav: '+r.stavCur+' '+UNITS[histType]+'</td>';
+        tblHtml+='<td class="r" style="font-size:11px;color:'+spoDiffColor+';padding-top:1px">'+(ly?'loni '+ly.spo+spoDiffStr:'—')+'</td>';
+        tblHtml+='<td class="r" style="font-size:11px;color:'+nakDiffColor+';padding-top:1px">'+(ly?'loni '+ly.nak.toLocaleString('cs')+nakDiffStr:'—')+'</td>';
+        tblHtml+='<td colspan="2" style="padding-top:1px"></td>';
+        tblHtml+='</tr>';
+      });
+      html+='<div class="card" style="padding:10px 12px;margin-bottom:8px;"><div class="tbl-wrap"><table>'+tblHtml+'</table></div></div>';
+    }
+
+    html+='</div></div>'; // close collapsible + period wrapper
+  });
+
+  cont.innerHTML=html||`<div class="empty"><i class="ti ti-gauge"></i>Žádné záznamy.</div>`;
+}
+
+function toggleHistPeriod(key){
+  if(!window._histOpen) window._histOpen={};
+  window._histOpen[key]=!window._histOpen[key];
+  const el=document.getElementById('hperiod-'+key);
+  const hdr=el?el.previousSibling:null;
+  if(el) el.style.display=window._histOpen[key]?'block':'none';
+  if(hdr){
+    const icon=hdr.querySelector('i');
+    if(icon) icon.style.transform=window._histOpen[key]?'rotate(180deg)':'';
+  }
+}
+
+// ─── Export / Import ──────────────────────────────────────────────────────────
+function exportJSON(){
+  const data={entries,settings,archived,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const ts=new Date().toISOString().slice(0,10);
+  a.href=url; a.download='energie-zaloha-'+ts+'.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const msg=document.getElementById('export-msg');
+  msg.textContent='✓ Záloha stažena';
+  setTimeout(()=>msg.textContent='',2500);
+}
+
+function importJSON(event){
+  const file=event.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.entries||!data.settings){toast('Neplatný soubor zálohy.');return;}
+      if(!confirm('Obnovit data ze zálohy? Aktuální data budou přepsána.')) return;
+      entries=data.entries;
+      settings=data.settings;
+      archived=data.archived||{};
+      if(!settings.plans) settings.plans={el:[],gas:[],wat:[]};
+      if(!settings.initStav) settings.initStav={el:'',gas:'',wat:''};
+      if(!settings.vyrocí) settings.vyrocí={el:1,gas:1,wat:1};
+      if(!settings.replacements) settings.replacements={el:[],gas:[],wat:[]};
+      persist();
+      const msg=document.getElementById('export-msg');
+      msg.textContent='✓ Data obnovena, obnovuji stránku...';
+      setTimeout(()=>location.reload(),1000);
+    }catch(err){
+      toast('Chyba při čtení souboru.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value='';
+}
+
+function exportCSV(){
+  let rows=[['Médium','Měsíc','Stav měřidla','Spotřeba','Cena/jednotka','Náklady','Záloha','Úspora']];
+  TYPES.forEach(t=>{
+    const r=calcRows(t);
+    r.forEach(row=>{
+      rows.push([LABELS[t],row.month,row.stavCur,row.spo,row.price,row.nak,row.zaloha,row.usp]);
+    });
+  });
+  const csv=rows.map(r=>r.map(v=>{
+    const s=String(v);
+    return s.includes(',')||s.includes(';')?'"'+s+'"':s;
+  }).join(';')).join('\\n');
+  const BOM='\\uFEFF'; // for Excel to recognize UTF-8 with diacritics
+  const blob=new Blob([BOM+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const ts=new Date().toISOString().slice(0,10);
+  a.href=url; a.download='energie-export-'+ts+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const msg=document.getElementById('export-msg');
+  msg.textContent='✓ CSV staženo';
+  setTimeout(()=>msg.textContent='',2500);
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+async function resetAllData(){
+  if(!confirm('Opravdu smazat VŠECHNA data? Tato akce je nevratná.')) return;
+  if(!confirm('Jsi si jistý? Smažou se všechny odečty, ceníky i nastavení.')) return;
+  const emptySettings={vyrocí:{el:1,gas:1,wat:1},initStav:{el:'',gas:'',wat:''},plans:{el:[],gas:[],wat:[]},replacements:{el:[],gas:[],wat:[]}};
+  // First save empty data to Firebase, then clear local and reload
+  localStorage.clear();
+  if(window._fbSave){
+    await window._fbSave([], emptySettings, {});
+  }
+  location.reload();
+}
+
+function toggleSettBlock(t){
+  const body=document.getElementById('sett-body-'+t);
+  const icon=document.getElementById('sett-icon-'+t);
+  const open=body.style.display==='none';
+  body.style.display=open?'block':'none';
+  if(icon) icon.style.transform=open?'rotate(180deg)':'';
+}
+
+function showPage(p){
+  activePage=p;
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(el=>el.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.getElementById('nav-'+p).classList.add('active');
+  if(p==='history') renderHistory();
+  if(p==='prehled') renderPrehled();
+  if(p==='add'){ if(!editingEntry) onAddMonthChange(); }
+  if(p==='settings') TYPES.forEach(t=>{renderPlans(t);renderReplacements(t);});
+}
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// Swipe between pages
+(function(){
+  const pages=['prehled','add','history','settings'];
+  let startX=0, startY=0, locked=false;
+  document.addEventListener('touchstart',e=>{
+    startX=e.touches[0].clientX;
+    startY=e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(locked) return;
+    const dx=e.changedTouches[0].clientX-startX;
+    const dy=e.changedTouches[0].clientY-startY;
+    if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5) return;
+    locked=true;
+    setTimeout(()=>locked=false, 400);
+    const idx=pages.indexOf(activePage);
+    if(dx<0&&idx<pages.length-1) showPage(pages[idx+1]);
+    if(dx>0&&idx>0) showPage(pages[idx-1]);
+  },{passive:true});
+})();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
 <html lang="c">
 <head>
 <meta charset="UTF-8"/>
