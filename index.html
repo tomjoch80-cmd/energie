@@ -417,6 +417,22 @@ td.neg{text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var
 
       <button class="btn btn-ghost" onclick="saveBaseSettings()">Uložit výročí a počáteční stavy</button>
       <p id="sett-saved" style="font-size:12px;color:var(--pos);text-align:center;margin-top:8px;min-height:16px;"></p>
+
+      <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;">
+        <div class="sec-title">Záloha dat</div>
+        <button class="btn btn-ghost" onclick="exportJSON()" style="margin-bottom:8px">
+          <i class="ti ti-download" style="font-size:14px"></i> Export záloha (JSON)
+        </button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(event)"/>
+        <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" style="margin-bottom:8px">
+          <i class="ti ti-upload" style="font-size:14px"></i> Obnovit ze zálohy (JSON)
+        </button>
+        <button class="btn btn-ghost" onclick="exportCSV()">
+          <i class="ti ti-table" style="font-size:14px"></i> Export do Excelu (CSV)
+        </button>
+        <p id="export-msg" style="font-size:12px;color:var(--pos);text-align:center;margin-top:8px;min-height:16px;"></p>
+      </div>
+
       <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;">
         <div class="sec-title" style="color:var(--neg)">Nebezpečná zóna</div>
         <button class="btn btn-ghost" style="border-color:var(--neg);color:var(--neg);margin-top:8px" onclick="resetAllData()">
@@ -1171,6 +1187,74 @@ function toggleHistPeriod(key){
     const icon=hdr.querySelector('i');
     if(icon) icon.style.transform=window._histOpen[key]?'rotate(180deg)':'';
   }
+}
+
+// ─── Export / Import ──────────────────────────────────────────────────────────
+function exportJSON(){
+  const data={entries,settings,archived,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const ts=new Date().toISOString().slice(0,10);
+  a.href=url; a.download='energie-zaloha-'+ts+'.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const msg=document.getElementById('export-msg');
+  msg.textContent='✓ Záloha stažena';
+  setTimeout(()=>msg.textContent='',2500);
+}
+
+function importJSON(event){
+  const file=event.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.entries||!data.settings){toast('Neplatný soubor zálohy.');return;}
+      if(!confirm('Obnovit data ze zálohy? Aktuální data budou přepsána.')) return;
+      entries=data.entries;
+      settings=data.settings;
+      archived=data.archived||{};
+      if(!settings.plans) settings.plans={el:[],gas:[],wat:[]};
+      if(!settings.initStav) settings.initStav={el:'',gas:'',wat:''};
+      if(!settings.vyrocí) settings.vyrocí={el:1,gas:1,wat:1};
+      if(!settings.replacements) settings.replacements={el:[],gas:[],wat:[]};
+      persist();
+      const msg=document.getElementById('export-msg');
+      msg.textContent='✓ Data obnovena, obnovuji stránku...';
+      setTimeout(()=>location.reload(),1000);
+    }catch(err){
+      toast('Chyba při čtení souboru.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value='';
+}
+
+function exportCSV(){
+  let rows=[['Médium','Měsíc','Stav měřidla','Spotřeba','Cena/jednotka','Náklady','Záloha','Úspora']];
+  TYPES.forEach(t=>{
+    const r=calcRows(t);
+    r.forEach(row=>{
+      rows.push([LABELS[t],row.month,row.stavCur,row.spo,row.price,row.nak,row.zaloha,row.usp]);
+    });
+  });
+  const csv=rows.map(r=>r.map(v=>{
+    const s=String(v);
+    return s.includes(',')||s.includes(';')?'"'+s+'"':s;
+  }).join(';')).join('\\n');
+  const BOM='\\uFEFF'; // for Excel to recognize UTF-8 with diacritics
+  const blob=new Blob([BOM+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const ts=new Date().toISOString().slice(0,10);
+  a.href=url; a.download='energie-export-'+ts+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const msg=document.getElementById('export-msg');
+  msg.textContent='✓ CSV staženo';
+  setTimeout(()=>msg.textContent='',2500);
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
