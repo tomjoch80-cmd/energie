@@ -64,6 +64,7 @@
 </script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 :root{
   --bg:#0f1923;--bg2:#162030;--bg3:#1e2d3d;
@@ -72,6 +73,11 @@
   --el:#4da6ff;--gas:#ffaa44;--wat:#44d4a0;
   --pos:#44d4a0;--neg:#ff6b6b;
   --r:12px;--rs:8px;
+}
+body.light{
+  --bg:#f0f4f8;--bg2:#ffffff;--bg3:#e2e8f0;
+  --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.2);
+  --text:#1a202c;--text2:#4a5568;--text3:#a0aec0;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;overflow:hidden;}
@@ -194,6 +200,7 @@ td.neg{text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var
     <div><div class="hdr-title">Energie</div><div class="hdr-sub" id="hdr-sub">Sledování spotřeby</div></div>
     <div style="display:flex;align-items:center;gap:10px;">
       <span id="sync-indicator" style="font-size:11px;color:var(--text3);display:none">↕ sync</span>
+      <button onclick="toggleTheme()" id="theme-btn" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:20px;padding:2px;" title="Přepnout téma"><i class="ti ti-sun" id="theme-icon"></i></button>
       <i class="ti ti-bolt" style="font-size:22px;color:var(--el)"></i>
     </div>
   </div>
@@ -251,6 +258,31 @@ td.neg{text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var
         <button class="sb" onclick="setHistType('wat')">Voda</button>
       </div>
       <div id="hist-content"></div>
+    </div>
+
+    <!-- GRAF -->
+    <div class="page" id="page-chart">
+      <div class="seg" id="chart-seg">
+        <button class="sb active" onclick="setChartType('el')">Elektřina</button>
+        <button class="sb" onclick="setChartType('gas')">Plyn</button>
+        <button class="sb" onclick="setChartType('wat')">Voda</button>
+      </div>
+      <div class="seg">
+        <button class="sb active" onclick="setChartMode('bar')" id="cm-bar"><i class="ti ti-chart-bar" style="font-size:13px"></i> Sloupcový</button>
+        <button class="sb" onclick="setChartMode('line')" id="cm-line"><i class="ti ti-chart-line" style="font-size:13px"></i> Čárový</button>
+      </div>
+      <div class="card" style="padding:14px;">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;" id="chart-title">Spotřeba</div>
+        <div style="position:relative;height:220px;">
+          <canvas id="mainChart"></canvas>
+        </div>
+      </div>
+      <div class="card" style="padding:14px;">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;">Náklady (Kč)</div>
+        <div style="position:relative;height:220px;">
+          <canvas id="costChart"></canvas>
+        </div>
+      </div>
     </div>
 
     <!-- NASTAVENÍ -->
@@ -434,6 +466,26 @@ td.neg{text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var
       </div>
 
       <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;">
+        <div class="sec-title">Připomenutí odečtu</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:10px;">Dostaneš upozornění v nastavený den každého měsíce.</div>
+        <div class="fr2" style="margin-bottom:8px;">
+          <div class="fg" style="margin-bottom:0">
+            <label>Den v měsíci</label>
+            <select id="remind-day">
+              <option value="1">1.</option><option value="3">3.</option><option value="5" selected>5.</option>
+              <option value="7">7.</option><option value="10">10.</option><option value="15">15.</option>
+            </select>
+          </div>
+          <div class="fg" style="margin-bottom:0;display:flex;align-items:flex-end;">
+            <button class="btn btn-ghost" style="width:100%" onclick="saveRemindDay()">Uložit den</button>
+          </div>
+        </div>
+        <button class="btn btn-ghost" onclick="requestNotifPermission()">
+          <i class="ti ti-bell" style="font-size:14px"></i> Povolit notifikace
+        </button>
+      </div>
+
+      <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;">
         <div class="sec-title" style="color:var(--neg)">Nebezpečná zóna</div>
         <button class="btn btn-ghost" style="border-color:var(--neg);color:var(--neg);margin-top:8px" onclick="resetAllData()">
           <i class="ti ti-trash" style="font-size:14px"></i> Smazat všechna data
@@ -447,6 +499,7 @@ td.neg{text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var
     <button class="nb active" onclick="showPage('prehled')" id="nav-prehled"><i class="ti ti-home"></i>Přehled</button>
     <button class="nb" onclick="showPage('add')" id="nav-add"><i class="ti ti-plus"></i>Odečet</button>
     <button class="nb" onclick="showPage('history')" id="nav-history"><i class="ti ti-list"></i>Historie</button>
+    <button class="nb" onclick="showPage('chart')" id="nav-chart"><i class="ti ti-chart-bar"></i>Graf</button>
     <button class="nb" onclick="showPage('settings')" id="nav-settings"><i class="ti ti-settings"></i>Nastavení</button>
   </nav>
 </div>
@@ -1290,14 +1343,137 @@ function showPage(p){
   if(p==='history') renderHistory();
   if(p==='prehled') renderPrehled();
   if(p==='add'){ if(!editingEntry) onAddMonthChange(); }
-  if(p==='settings') TYPES.forEach(t=>{renderPlans(t);renderReplacements(t);});
+  if(p==='chart') renderCharts();
+  if(p==='settings'){
+    TYPES.forEach(t=>{renderPlans(t);renderReplacements(t);});
+    const rd=document.getElementById('remind-day');
+    if(rd) rd.value=localStorage.getItem('en_remind_day')||'5';
+  }
 }
+
+// ─── Theme ────────────────────────────────────────────────────────────────────
+function saveRemindDay(){
+  const day=document.getElementById('remind-day').value;
+  localStorage.setItem('en_remind_day',day);
+  toast('✓ Den připomenutí uložen: '+day+'.');
+}
+
+function toggleTheme(){
+  const isLight=document.body.classList.toggle('light');
+  localStorage.setItem('en_theme', isLight?'light':'dark');
+  document.getElementById('theme-icon').className=isLight?'ti ti-moon':'ti ti-sun';
+}
+(function initTheme(){
+  const t=localStorage.getItem('en_theme');
+  if(t==='light'){
+    document.body.classList.add('light');
+    const ic=document.getElementById('theme-icon');
+    if(ic) ic.className='ti ti-moon';
+  }
+})();
+
+// ─── Charts ───────────────────────────────────────────────────────────────────
+let chartType='el', chartMode='bar', chartInst=null, costChartInst=null;
+
+function setChartType(t){
+  chartType=t;
+  document.querySelectorAll('#chart-seg .sb').forEach((b,i)=>b.classList.toggle('active',TYPES[i]===t));
+  renderCharts();
+}
+
+function setChartMode(m){
+  chartMode=m;
+  ['bar','line'].forEach(x=>document.getElementById('cm-'+x).classList.toggle('active',x===m));
+  renderCharts();
+}
+
+function renderCharts(){
+  const rows=calcRows(chartType);
+  if(!rows.length){
+    if(chartInst){chartInst.destroy();chartInst=null;}
+    if(costChartInst){costChartInst.destroy();costChartInst=null;}
+    return;
+  }
+  const labels=rows.map(r=>r.month);
+  const spoData=rows.map(r=>r.spo);
+  const nakData=rows.map(r=>r.nak);
+  const color=COLORS[chartType];
+  const isDark=!document.body.classList.contains('light');
+  const gridColor=isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)';
+  const tickColor=isDark?'#7a90a4':'#4a5568';
+
+  document.getElementById('chart-title').textContent='Spotřeba ('+UNITS[chartType]+')';
+
+  const cfg=(data,col)=>({
+    type:chartMode,
+    data:{labels,datasets:[{
+      label:'',data,
+      backgroundColor:col+'99',
+      borderColor:col,
+      borderWidth:2,
+      borderRadius:chartMode==='bar'?4:0,
+      tension:0.3,
+      fill:chartMode==='line',
+      pointRadius:3
+    }]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:tickColor,font:{size:10},maxRotation:45},grid:{color:gridColor}},
+        y:{ticks:{color:tickColor,font:{size:10}},grid:{color:gridColor},beginAtZero:true}
+      }
+    }
+  });
+
+  if(chartInst) chartInst.destroy();
+  chartInst=new Chart(document.getElementById('mainChart'),cfg(spoData,color));
+
+  if(costChartInst) costChartInst.destroy();
+  costChartInst=new Chart(document.getElementById('costChart'),cfg(nakData,color));
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+function requestNotifPermission(){
+  if(!('Notification' in window)){toast('Notifikace nejsou podporovány.');return;}
+  Notification.requestPermission().then(p=>{
+    if(p==='granted'){
+      toast('✓ Notifikace povoleny');
+      scheduleMonthlyReminder();
+    } else {
+      toast('Notifikace zamítnuty — povol je v nastavení prohlížeče.');
+    }
+  });
+}
+
+function scheduleMonthlyReminder(){
+  // Check once a day if we should remind
+  const lastRemind=localStorage.getItem('en_last_remind');
+  const now=new Date();
+  const reminderDay=parseInt(localStorage.getItem('en_remind_day')||'5');
+  if(now.getDate()===reminderDay){
+    const monthKey=now.toISOString().slice(0,7);
+    if(lastRemind!==monthKey){
+      const allHaveEntry=TYPES.every(t=>getByType(t).some(e=>e.month===monthKey));
+      if(!allHaveEntry && Notification.permission==='granted'){
+        new Notification('Energie — nezapomněl/a jsi?',{
+          body:'Je '+reminderDay+'. v měsíci — čas zadat odečty měřidel!',
+          icon:'./icon-192.png'
+        });
+        localStorage.setItem('en_last_remind',monthKey);
+      }
+    }
+  }
+}
+
+// Check reminder on load
+setTimeout(scheduleMonthlyReminder, 3000);
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 
 // Swipe between pages
 (function(){
-  const pages=['prehled','add','history','settings'];
+  const pages=['prehled','add','history','chart','settings'];
   let startX=0, startY=0, locked=false;
   document.addEventListener('touchstart',e=>{
     startX=e.touches[0].clientX;
