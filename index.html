@@ -1039,10 +1039,10 @@ function renderPrehled(){
         html+='<div style="background:var(--bg3);border-radius:var(--rs);padding:8px 12px;margin-bottom:6px;font-size:12px;">';
         html+='<div style="color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;font-size:10px;">Porovnání s předchozím obdobím</div>';
         html+='<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text2)">Spotřeba loni</span><span style="font-family:DM Mono,monospace">'+prev.totalSpo.toLocaleString('cs')+' '+UNITS[t]+'</span></div>';
-        html+='<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text2)">Změna spotřeby</span><span style="font-family:DM Mono,monospace;color:'+spoDiffColor+'">'+spoDiffStr+'</span></div>';
+        html+='<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text2)">Aktuální spotřeba</span><span style="font-family:DM Mono,monospace;color:'+spoDiffColor+'">'+spoDiffStr+'</span></div>';
         html+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
         html+='<div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text2)">Náklady loni</span><span style="font-family:DM Mono,monospace">'+prev.totalNak.toLocaleString('cs')+' Kč</span></div>';
-        html+='<div style="display:flex;justify-content:space-between;"><span style="color:var(--text2)">Změna nákladů</span><span style="font-family:DM Mono,monospace;color:'+nakDiffColor+'">'+nakDiffStr+'</span></div>';
+        html+='<div style="display:flex;justify-content:space-between;"><span style="color:var(--text2)">Aktuální náklady</span><span style="font-family:DM Mono,monospace;color:'+nakDiffColor+'">'+nakDiffStr+'</span></div>';
         html+='</div>';
       }
       html+=`<div style="text-align:right;margin-bottom:4px;">
